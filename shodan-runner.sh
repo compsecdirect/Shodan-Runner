@@ -1,93 +1,88 @@
 #!/bin/dash
+
 clear
-echo '███████╗██╗  ██╗ ██████╗ ██████╗  █████╗ ███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗███╗   ██╗███████╗██████╗ '
-echo '██╔════╝██║  ██║██╔═══██╗██╔══██╗██╔══██╗████╗  ██║██╔══██╗██║   ██║████╗  ██║████╗  ██║██╔════╝██╔══██╗'
-echo '███████╗███████║██║   ██║██║  ██║███████║██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝'
-echo '╚════██║██╔══██║██║   ██║██║  ██║██╔══██║██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗'
-echo '███████║██║  ██║╚██████╔╝██████╔╝██║  ██║██║ ╚████║██║  ██║╚██████╔╝██║ ╚████║██║ ╚████║███████╗██║  ██║'
-echo '╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝'
+cat << 'EOF'
+███████╗██╗  ██╗ ██████╗ ██████╗  █████╗ ███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗███╗   ██╗███████╗██████╗ 
+██╔════╝██║  ██║██╔═══██╗██╔══██╗██╔══██╗████╗  ██║██╔══██╗██║   ██║████╗  ██║████╗  ██║██╔════╝██╔══██╗
+███████╗███████║██║   ██║██║  ██║███████║██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝
+╚════██║██╔══██║██║   ██║██║  ██║██╔══██║██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗
+███████║██║  ██║╚██████╔╝██████╔╝██║  ██║██║ ╚████║██║  ██║╚██████╔╝██║ ╚████║██║ ╚████║███████╗██║  ██║
+╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
+EOF
 
-#set outputfile = $1
-#set country = $2
-#set vendors = $3
-
-echo 'ver 0.4 / Last update June 25, 2017 / created by @jfersec'
+echo 'Version 0.5 / Last Update Jan 2025 / Created by @jfersec'
 echo 'https://github.com/compsecdirect/Shodan-Runner'
 echo 'License: MIT'
-# changes
-# v0.4 --added Python-setup tools requirement to initial checks, bash to dash shell change, removed if check double brackets on net-commms
-# v0.3 --documented uses, added input checking, first public release
-# v0.2 --removed parse feature question after download is completed
-# v0.1 --initial proof of concept
 
-# Check if shodan is installed, if not, install shodan python, ask user for api key, initialize shodan cli with api key #
-
+# Function to check if Shodan CLI is installed, install if missing
 check_shodan() {
-        hash shodan 2>/dev/null || { echo >&2 "shodan cli for python not found, installing and exiting, re-run script after succesful install" ;sudo apt-get install python-setuptools -y; sudo easy_install shodan; exit; }
+    if ! command -v shodan >/dev/null 2>&1; then
+        echo "Shodan CLI not found. Installing..."
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+        pip3 install --upgrade shodan
+        echo "Shodan CLI installed. Please re-run the script."
+        exit 1
+    fi
 }
 
+# Function to check and initialize the Shodan API key
 check_api_key() {
-        shodan info 2>/dev/null || { echo >&2 "no api key,get your api key for shodan and insert here"; read f; shodan init $f; }
+    if ! shodan info >/dev/null 2>&1; then
+        echo "No API key found. Please provide your Shodan API key:"
+        read -r api_key
+        shodan init "$api_key"
+        echo "API key initialized."
+    fi
 }
 
-# wanted to use openssl s_client -connect shodan.io:443 -quiet, but doing the ssl checks slow down the tool, you pick...
+# Check network connectivity to Shodan
+check_network_comms() {
+    if ! wget --tries=2 --timeout=8 -q --spider https://shodan.io; then
+        echo "Cannot reach Shodan. Check your network or Shodan.io availability."
+        exit 1
+    fi
+}
 
-check_network_comms(){
-        wget --tries=2 --timeout=8 -q --spider https://shodan.io --no-check-certificate
-        if [ $? -ne 0 ]
-        then
-                        echo "Cannot reach shodan, either your network connection is down or shodan.io cannot be reached at the moment"
-                                exit
-                        fi
-                }
+# Validate script inputs
+check_inputs() {
+    if [ "$#" -ne 3 ]; then
+        echo "Usage: $0 [output filename] [country file] [vendor file]"
+        echo "Example: $0 shodan-collection countries.txt vendors.txt"
+        exit 1
+    fi
+}
 
-                # once shodan is installed and api key is set, it should show how many credits you have remaining on this api key
+# Print usage instructions
+print_usage() {
+    echo "Usage: $0 [output filename] [country file] [vendor file]"
+    echo ""
+    echo "This script uses the Shodan CLI to perform automated queries."
+    echo "Ensure Shodan CLI is installed and API key is initialized."
+    echo "Example: $0 shodan-collection countries.txt vendors.txt"
+    echo ""
+}
 
-                # simple function to ensure 3 parameters are passed
+# Main script logic
+main() {
+    check_network_comms
+    check_shodan
+    check_api_key
+    print_usage
+    check_inputs "$@"
 
-                check_inputs() {
-                        if [ $# -ne 3 ]
-                        then
-                                        echo "Wrong number of parameters used, script takes 3 arguments"
-                                                exit
-                                        fi
-                                }
+    output_file="$1"
+    country_file="$2"
+    vendor_file="$3"
 
-                                # Set newline and outfile/inputfile in order to parse content correctly.
+    while IFS= read -r country; do
+        while IFS= read -r vendor; do
+            query_file="${output_file}.${country}.${vendor}"
+            query_file=$(echo "$query_file" | tr -d '"' | tr -d "[:space:]" | sed 's/:/_/g')
+            shodan download "$query_file" "$country" "$vendor" --limit 10000
+        done < "$vendor_file"
+    done < "$country_file"
+}
 
-                                newline='
-                                '
-
-                                OIFS=$IFS
-                                IFS=$newline
-                                print_usage() {
-                                        echo ''
-                                        echo ''
-
-                                        echo 'This script is a simple nested bash loop that uses an already activates shodan cli with api key in order to expedite queries for collection'
-
-                                        echo 'usage: shodan-runner [desired output filename] [filename 1] [filename 2]'
-                                        echo ''
-                                        echo 'Script takes 3 inputs. Order, name or content of text files does not affect script'
-                                        echo ''
-                                        echo 'example: ./shodan-runner shodan-collection countries.txt vendors.txt'
-                                        echo ''
-                                        echo 'No safety checks here for bad syntax or bad search filters, pay attention or lose search queries tokens :-)'
-                                        echo ''
-                                }
-
-                                # Nested bash loop that loops two times and attempts shodan download $filename $country $vendors
-
-                                check_network_comms
-                                check_shodan
-                                check_api_key
-                                print_usage
-                                check_inputs $1 $2 $3
-                                for c in $(cat $2)
-                                do
-                                                IFS=$OIFS
-                                                        for v in $(cat $3)
-                                                                        do
-                                                                                                shodan download $(echo $1.$c.$v | tr -d '"' | tr -d "[:space:]" | sed 's/\:/_/g') $c $v --limit 10000
-                                                                                                        done
-                                                                                                done
+# Execute the script
+main "$@"
